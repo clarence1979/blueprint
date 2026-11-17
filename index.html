@@ -485,7 +485,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--purple)}
 /* blockly chrome */
 .blocklyToolboxDiv{background:#fff !important;border-right:1px solid var(--line)}
 .blocklyTreeLabel,.blocklyToolboxCategoryLabel{color:var(--ink-2) !important;font-size:12.5px !important;font-weight:600}
-.blocklyTreeRow:hover{background:#f4f6fb !important}
+.blocklyTreeRow:not(.blocklyTreeSelected):hover{background:#d3d9e4 !important}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-11px)}}
 @keyframes rip{0%{opacity:.9;transform:scale(.4)}100%{opacity:0;transform:scale(1.5)}}
@@ -1049,9 +1049,20 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .bp-darktext > .blocklyText,
 .bp-darktext > g:not(.blocklyDraggable):not(.blocklyEditableText) > .blocklyText{fill:#33230a !important}
 #hdr .hicon#btnSave{border-color:#D6D2FF}
-/* the chosen blocks drawer: a light highlight and dark lettering, whatever the drawer's colour */
-.blocklyTreeRow.blocklyTreeSelected{background-color:#ECEBFF !important}
-.blocklyTreeRow.blocklyTreeSelected .blocklyTreeLabel{color:var(--ink) !important}
+/* the blocks toolbox, as Thunkable draws it: grey-blue column, plain lettering,
+   built-in drawers with a colour strip, component drawers without one */
+.blocklyToolboxDiv{background:#e1e5ec !important;border-right:0}
+.blocklyTreeLabel,.blocklyToolboxCategoryLabel{color:#1c2333 !important;font-size:14.5px !important;font-weight:400}
+.blocklyTreeRow{height:25px !important;line-height:25px !important;margin-bottom:0 !important}
+.blocklyTreeRow.bp-comp{border-left-color:transparent !important}
+.blocklyTreeRow.blocklyTreeSelected .blocklyTreeLabel{color:#fff !important}
+.blocklyTreeRow.blocklyTreeSelected.bp-row-dark .blocklyTreeLabel{color:#1c2333 !important}
+.blocklyTreeSeparator{border-bottom:0 !important;height:8px !important;margin:0 !important}
+.blocklyFlyoutBackground{fill:#e1e5ec !important;fill-opacity:.96 !important}
+/* Add Components: one full-width pill per component, with a purple icon */
+#palette .pal-item{width:100%;height:36px;border-radius:999px;padding:0 14px;box-shadow:none}
+#palette .pal-item .pic{color:#6C63F0}
+.dropzone small{display:block;font-size:11px;margin-top:2px}
 /* messages sit clear of the invisible components listed under the phone */
 #toast{bottom:74px}
 </style>
@@ -28596,7 +28607,7 @@ def('sound', { title:'Sound', cat:'Voice', invisible:true, tip:'Plays a sound fi
   events:[ ['finished','Finished Playing'] ],
   methods:[ ['play','play'], ['pause','pause'], ['stop','stop'],
             ['getDuration','get duration', [], 'number'] ] });
-def('tts', { title:'Text to Speech', cat:'Voice', invisible:true, tip:'Reads text aloud.',
+def('tts', { title:'Text To Speech', cat:'Voice', invisible:true, tip:'Reads text aloud.',
   defaults:{ language:'en-AU', pitch:1, rate:1 },
   props:[ ['language','Default language','language'], ['pitch','Pitch (0–2)','number'], ['rate','Rate (0.1–2)','number'] ],
   blockProps:['language','pitch','rate'],
@@ -31755,12 +31766,13 @@ const { state, esc } = TK;
 const G = javascript.javascriptGenerator;
 const Order = javascript.Order;
 
-/* Thunkable's block colours (sampled from its own editor): gold events,
-   purple calls, teal property blocks, green output values — and Blockly's
-   classic palette for the built-in categories, as Thunkable uses. */
-const COL = { event:'#F5AA45', set:'#0C9C7E', get:'#0C9C7E', method:'#725CA5', vars:'#A55B80',
-  data:'#2F8FD8', control:'#F5AA45', logic:'#5B80A5', math:'#5B67A5', text:'#5BA58C',
-  lists:'#745BA5', colour:'#A5745B', objects:'#5B8BA5', device:'#7A8699', value:'#6ED09B' };
+/* Thunkable's block colours, read off its own editor (x.thunkable.com):
+   gold events and Control, purple calls, teal "set", light-green "get" and
+   output values, and its colour for each built-in drawer. */
+const COL = { event:'#F3AA44', set:'#0C9C7E', get:'#6ED09B', method:'#7560A4', vars:'#F87956',
+  data:'#2F8FD8', control:'#F3AA44', logic:'#45B4A9', math:'#6789CC', text:'#DF6078',
+  lists:'#76AFC9', colour:'#7F7F7F', objects:'#F99EA3', device:'#9596EB', value:'#6ED09B',
+  functions:'#7560A4' };
 
 const S = v => JSON.stringify(v);
 const stmt = (b, n) => G.statementToCode(b, n);
@@ -32465,7 +32477,7 @@ def('tk_components_in', function(){
   this.appendDummyInput().appendField('all components in')
     .appendField(new TKDropdown(compDropdown(['screen', 'row', 'column'])), 'COMPONENT');
   this.setOutput(true, 'Array');
-  this.setColour(COL.get);
+  this.setColour(COL.method);
   this.setTooltip('A list of the components inside this container — pair it with "for each item".');
 }, b => [`compsIn(${S(b.getFieldValue('COMPONENT'))})`, Order.FUNCTION_CALL]);
 def('tk_create_component', function(){
@@ -32532,7 +32544,8 @@ function drawerFor(c){
   });
   if (c.type === 'screen') rows.push(`<block type="tk_navigate"><field name="SCREEN">${esc(c.name)}</field></block>`);
   if (!rows.length) return '';
-  return `<category name="${esc(c.name)}" colour="${meta.invisible ? COL.method : COL.set}">${rows.join('')}</category>`;
+  /* a component's drawer has no colour strip — only the built-in drawers do */
+  return `<category name="${esc(c.name)}" css-row="blocklyTreeRow bp-comp">${rows.join('')}</category>`;
 }
 
 function toolboxXml(){
@@ -32541,9 +32554,8 @@ function toolboxXml(){
   const hasDs = state.dataSources.length > 0;
   const anyType = (VISIBLE_TYPES()[0]) || 'button';
   return `<xml>
-    ${drawers}
-    ${drawers ? '<sep></sep>' : ''}
     <category name="Control" colour="${COL.control}">
+      <block type="tk_navigate"></block>
       <block type="controls_if"></block>
       <block type="controls_if"><mutation else="1"></mutation></block>
       <block type="tk_wait"><value name="SECS">${num(1)}</value></block>
@@ -32554,7 +32566,6 @@ function toolboxXml(){
       <block type="tk_forever"></block>
       <block type="controls_flow_statements"></block>
       <block type="logic_ternary"></block>
-      <block type="tk_navigate"></block>
       <block type="tk_open_link"><value name="URL">${txt('https://digitalvector.com.au')}</value></block>
     </category>
     <category name="Logic" colour="${COL.logic}">
@@ -32640,7 +32651,7 @@ function toolboxXml(){
       <block type="tk_var_change"><value name="DELTA">${num(1)}</value></block>
       <block type="tk_var_changed"></block>
     </category>
-    <category name="Functions" colour="#8a6cf0" custom="PROCEDURE"></category>
+    <category name="Functions" colour="${COL.functions}" custom="PROCEDURE"></category>
     ${hasDs ? `<sep></sep><category name="Data Sources" colour="${COL.data}">
       <block type="tk_ds_create"><value name="OBJ"><block type="tk_obj_create"></block></value></block>
       <block type="tk_ds_get_value"><value name="ID">${num(1)}</value></block>
@@ -32655,7 +32666,8 @@ function toolboxXml(){
       <block type="tk_ds_delete_all"></block>
     </category>` : ''}
     <sep></sep>
-    <category name="Any Component" colour="${COL.method}">
+    ${drawers}
+    <category name="Any Component" css-row="blocklyTreeRow bp-comp">
       <block type="tk_any_event"><field name="TYPE">${anyType}</field></block>
       <block type="tk_val"><field name="NAME">component</field></block>
       <block type="tk_component"></block>
@@ -32683,10 +32695,10 @@ def('tk_wait', function(){
 const theme = Blockly.Theme.defineTheme('tk-light', {
   base: Blockly.Themes.Classic,
   componentStyles: {
-    workspaceBackgroundColour: '#f7f8fb',
-    toolboxBackgroundColour: '#ffffff',
-    toolboxForegroundColour: '#3b4256',
-    flyoutBackgroundColour: '#eef0f6',
+    workspaceBackgroundColour: '#ffffff',
+    toolboxBackgroundColour: '#e1e5ec',
+    toolboxForegroundColour: '#1c2333',
+    flyoutBackgroundColour: '#e1e5ec',
     flyoutForegroundColour: '#3b4256',
     flyoutOpacity: 1,
     scrollbarColour: '#c9cfdc',
@@ -32694,6 +32706,18 @@ const theme = Blockly.Theme.defineTheme('tk-light', {
     insertionMarkerOpacity: 0.5,
     cursorColour: '#5C6BE8',
     gridColour: '#e3e7ef',
+  },
+  /* Blockly's own blocks (if, repeat, +, join, lists…) in Thunkable's colours */
+  blockStyles: {
+    logic_blocks:            { colourPrimary: COL.logic },
+    loop_blocks:             { colourPrimary: COL.control },
+    math_blocks:             { colourPrimary: COL.math },
+    text_blocks:             { colourPrimary: COL.text },
+    list_blocks:             { colourPrimary: COL.lists },
+    colour_blocks:           { colourPrimary: COL.colour },
+    variable_blocks:         { colourPrimary: COL.vars },
+    variable_dynamic_blocks: { colourPrimary: COL.vars },
+    procedure_blocks:        { colourPrimary: COL.functions },
   },
   fontStyle: { family: "'Segoe UI', system-ui, sans-serif", size: 10.5 },
 });
@@ -32750,6 +32774,19 @@ function init(){
 
   useOfflineMedia(ws);
   TK.workspace = ws;
+  /* The open drawer is filled with its own colour, as in Thunkable. Its name is
+     lettered white or dark, whichever can actually be read on that colour. */
+  ws.addChangeListener(e => {
+    if (e.type !== Blockly.Events.TOOLBOX_ITEM_SELECT) return;
+    requestAnimationFrame(() => {
+      document.querySelectorAll('#blocklyDiv .blocklyTreeRow').forEach(row => {
+        const m = (getComputedStyle(row).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+        const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        const lum = m.length >= 3 ? 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]) : 1;
+        row.classList.toggle('bp-row-dark', 1.05 / (lum + 0.05) < 3);
+      });
+    });
+  });
 
   TK.loadingXml = true;
   loadXmlInto(ws, state.blocksXml);
@@ -33280,7 +33317,7 @@ function renderInvisible(){
   const scr = findComp(state.currentScreen);
   const list = scr ? allComps().filter(c => C[c.type].invisible && screenOf(c.id) && screenOf(c.id).id === scr.id) : [];
   if (!list.length){
-    box.innerHTML = '<div class="dropzone">Invisible components (Camera, Timer, Sound…) appear here</div>';
+    box.innerHTML = '<div class="dropzone">Drag Invisible Components here<br><small>Camera, Text To Speech, Timer…</small></div>';
     return;
   }
   box.innerHTML = '<div class="chiprow"></div>';
