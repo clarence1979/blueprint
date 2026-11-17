@@ -1065,6 +1065,12 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 .dropzone small{display:block;font-size:11px;margin-top:2px}
 /* messages sit clear of the invisible components listed under the phone */
 #toast{bottom:74px}
+
+/* "Fit contents" takes its place from the parent's Horizontal Alignment; a stretch parent pins it left */
+.al-stretch > .tk-comp.w-fit{align-self:flex-start}
+/* an Image with no picture yet: Thunkable's pale box with a large purple picture mark */
+.tk-img-empty{background:#fff;border:1px solid #E4E6EE;color:#9B8FFB}
+.tk-img-empty svg{width:64%;height:64%;max-width:130px;max-height:130px;stroke-width:1.9}
 </style>
 <script id="s-selfsave">/* ══════════════════════════════════════════════════════════════════════
    BLUE PRINT — remember this page exactly as it was written
@@ -28633,7 +28639,7 @@ def('audioRec', { title:'Audio Recorder', cat:'Voice', invisible:true, tip:'Reco
 def('image', { title:'Image', cat:'Image', tip:'Displays a picture in your app.',
   defaults: Object.assign({ picture:'', resizeMode:'cover', clickable:true },
     sizeDefaults('Absolute size','Fill container'), { heightValue:180, borderRadius:8 }),
-  props:[ ['picture','Picture','asset'], ['resizeMode','Resize mode','select',['cover','contain','stretch','center']],
+  props:[ ['picture','Picture','asset'], ['resizeMode','Picture Resize Mode','select',['cover','contain','stretch','center']],
     ...VIS, ...BORDER, ...SIZE('height'), ...SIZE('width'), ...SPACING ],
   blockProps:['picture','resizeMode','visible'],
   events:[ ['click','Click'], ['longClick','Long Click'] ] });
@@ -28798,6 +28804,31 @@ const LANGS = [['English (AU)','en-AU'],['English (US)','en-US'],['English (UK)'
   ['Arabic','ar'],['Indonesian','id'],['Korean','ko'],['Greek','el'],['Vietnamese','vi']];
 
 window.TK = window.TK || {};
+/* Property names as Thunkable writes them: "Text Color", "Font Size",
+   "Number Of Lines". (The small margin / padding / border labels stay lower
+   case, as they are there.) */
+const thunkLabel = s => String(s).replace(/colour/gi, m => (m.charAt(0) === 'C' ? 'Color' : 'color'))
+  .replace(/^[^(]+/, head => head.replace(/\b([a-z])/g, (m, ch) => ch.toUpperCase()));
+Object.values(C).forEach(m => (m.props || []).forEach(pr => {
+  const tag = typeof pr[3] === 'string' ? pr[3] : (typeof pr[4] === 'string' ? pr[4] : null);
+  if (typeof pr[1] === 'string' && (!tag || tag === 'adv')) pr[1] = thunkLabel(pr[1]);
+}));
+
+/* What a component looks like when YOU add it: Thunkable's own starting
+   values, read off a new Thunkable project. A new screen centres what is on
+   it; a Label and a Button are only as big as their words; an Image is a
+   150 × 150 square. (Templates and AI-built apps keep the roomier defaults
+   written into each component above.) */
+const PLACED = {
+  screen:    { alignV:'center', alignH:'center', paddingTop:0, paddingBottom:0, paddingLeft:0, paddingRight:0 },
+  label:     { fontSize:18, color:'#000000', widthMode:'Fit contents', heightMode:'Fit contents', marginBottom:0 },
+  button:    { fontSize:18, backgroundColor:'#4A68F0', borderRadius:15, widthMode:'Fit contents', heightMode:'Fit contents',
+               paddingTop:6, paddingBottom:6, paddingLeft:15, paddingRight:15, marginBottom:0 },
+  image:     { heightMode:'Absolute size', heightValue:150, widthMode:'Absolute size', widthValue:150,
+               borderRadius:0, marginBottom:0 },
+  animation: { heightMode:'Absolute size', heightValue:160, widthMode:'Absolute size', widthValue:160, marginBottom:0 },
+};
+window.TK.PLACED = PLACED;
 window.TK.COMPONENTS = C;
 window.TK.CATS = CATS;
 /* Fonts a phone already has. No web fonts: Blue Print must work offline, and a
@@ -29018,9 +29049,10 @@ function nextName(type){
 }
 /* a component name must be usable in a block: letters, digits and underscores */
 TK.cleanName = v => String(v == null ? '' : v).trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]/g, '');
-function makeComp(type){
+function makeComp(type, placed){
   const meta = C[type];
-  const comp = { id: uid(), type, name: nextName(type), props: clone(meta.defaults || {}) };
+  const comp = { id: uid(), type, name: nextName(type),
+    props: Object.assign(clone(meta.defaults || {}), placed ? clone((TK.PLACED || {})[type] || {}) : {}) };
   if (meta.container) comp.children = [];
   if (type === 'screen') comp.props.title = comp.name;
   return comp;
@@ -29031,7 +29063,7 @@ function makeComp(type){
 function addComponent(type, parentId){
   const meta = C[type]; if (!meta) return null;
   mark(null);
-  const comp = makeComp(type);
+  const comp = makeComp(type, true);      /* added by hand → Thunkable's starting values */
 
   if (type === 'screen' || meta.navigator){
     if (type === 'screen' && parentId){
@@ -29711,7 +29743,11 @@ function applyBox(el, p, parentDir){
   if (wm === 'Fill container'){ if (inRow){ grow(1, 1, '0%'); s.minWidth = '0'; } else { s.width = '100%'; s.alignSelf = 'stretch'; } }
   else if (wm === 'Absolute size'){ s.width = wv + 'px'; grow(0, 0, 'auto'); if (!inRow) s.alignSelf = 'auto'; }
   else if (wm === 'Relative size'){ s.width = Math.max(0, Math.min(100, wv)) + '%'; grow(0, 0, 'auto'); }
-  else if (wm === 'Fit contents'){ s.width = 'auto'; grow(0, 0, 'auto'); if (!inRow) s.alignSelf = 'flex-start'; }
+  /* Only as wide as its contents. Where it sits is the PARENT's Horizontal
+     Alignment (left / center / right); only a "stretch" parent needs it pinned,
+     or it would be stretched after all. (It used to be pinned left always, so
+     a centred screen could not centre a Switch, a Rating or a short Label.) */
+  else if (wm === 'Fit contents'){ s.width = 'auto'; grow(0, 0, 'auto'); if (!inRow) el.classList.add('w-fit'); }
 
   const hm = p.heightMode, hv = Number(p.heightValue) || 0;
   if (hm === 'Fill container'){ if (inRow){ s.height = '100%'; s.alignSelf = 'stretch'; } else { grow(1, 1, '0%'); s.minHeight = '0'; } }
@@ -30319,7 +30355,10 @@ function renderNode(c, ctx, parentDir){
     applyBackground(wrap, c.props);
     if (c.props.scrollable) wrap.style.overflowY = 'auto';
     if (dir === 'row'){ wrap.style.justifyContent = flex(c.props.alignH); wrap.style.alignItems = flex(c.props.alignV); }
-    else { wrap.style.alignItems = flex(c.props.alignH); wrap.style.justifyContent = flex(c.props.alignV); }
+    else {
+      wrap.style.alignItems = flex(c.props.alignH); wrap.style.justifyContent = flex(c.props.alignV);
+      if ((c.props.alignH || 'stretch') === 'stretch') wrap.classList.add('al-stretch');
+    }
     (c.children || []).forEach(ch => {
       const el = renderNode(ch, ctx, dir);
       if (el) wrap.appendChild(el);
@@ -30334,6 +30373,12 @@ function renderNode(c, ctx, parentDir){
   } else {
     const inner = (R[c.type] || R.label)(c, ctx);
     inner.dataset.role = 'main';
+    if (c.type === 'button'){
+      ['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight'].forEach(k => {
+        inner.style[k] = wrap.style[k] || '0px';
+        wrap.style[k] = '0px';
+      });
+    }
     /* in design mode the component is a draggable object, not a live control */
     if (ctx.design) inner.style.pointerEvents = 'none';
     wrap.appendChild(inner);
@@ -30357,7 +30402,8 @@ function renderNode(c, ctx, parentDir){
 function renderScreenInto(host, screen, ctx){
   const p = screen.props;
   host.innerHTML = '';
-  host.className = 'tk-screen' + (ctx.design ? ' design' : ' run') + (p.scrollable ? ' scroll' : '');
+  host.className = 'tk-screen' + (ctx.design ? ' design' : ' run') + (p.scrollable ? ' scroll' : '') +
+    ((p.alignH || 'stretch') === 'stretch' ? ' al-stretch' : '');
   if (ctx.design && TK.state.selectedId === screen.id) host.classList.add('screen-sel');
   host.style.background = p.backgroundColor || '#fff';
   host.style.paddingTop = (+p.paddingTop || 0) + 'px';
@@ -31907,6 +31953,10 @@ function withOutputs(block, labels){
   });
 }
 
+/* which call inputs start with a number, and which take a picture / sound / file (no starter) */
+const NUMERIC_ARGS = ['x','y','x1','y1','x2','y2','radius','width','height','size','latitude','longitude','zoom'];
+const MEDIA_ARGS = ['image','photo','file','audio','video','buttons','value'];
+
 /* ══ Event and method menus ══
    In Thunkable the event ("Click") and the method ("take photo") are menus on
    the block. Each one here is its own block type, so picking another entry
@@ -32024,12 +32074,22 @@ Object.keys(C).forEach(type => {
         .appendField(DD(compDropdown(types)), 'COMPONENT')
         .appendField('\u2019s')
         .appendField(siblingMenu(mOptions, name, k => `tk_m_${type}_${k}`));
-      (args || []).forEach((a, i) => {
-        this.appendValueInput('A' + i).setAlign(RIGHT).appendField(a);
+      /* In the drawer a call is a single line, as in Thunkable. In your
+         program it opens out into its inputs, its outputs and "then do". */
+      const full = !this.isInFlyout;
+      if (full) (args || []).forEach((a, i) => {
+        const inp = this.appendValueInput('A' + i).setAlign(RIGHT).appendField(a);
+        /* a starter value for a freshly dragged-in block (a loaded project keeps what it saved) */
+        const start = NUMERIC_ARGS.includes(a) ? { type:'math_number', fields:{ NUM: a === 'radius' ? 20 : 50 } }
+          : MEDIA_ARGS.includes(a) ? null
+          : { type:'text', fields:{ TEXT: a === 'colour' ? 'red' : '' } };
+        if (start && !TK.loadingXml){ try{ inp.connection.setShadowState(start); }catch(e){} }
       });
       if (outputs && outputs.length){
-        withOutputs(this, labels);
-        this.appendStatementInput('DO').appendField('then do');
+        if (full){
+          withOutputs(this, labels);
+          this.appendStatementInput('DO').appendField('then do');
+        }
         this.setPreviousStatement(true); this.setNextStatement(true);
       } else if (returns){
         this.setOutput(true, null);
@@ -32514,9 +32574,12 @@ const NUMPROPS = ['fontSize','value','minValue','maxValue','columns','interval',
   'pitch','rate','volume','speed','maxValue'];
 const BOOLPROPS = ['visible','disabled','fontBold','fontItalic','showArrow','enabled','readOnly','loop','autoPlay'];
 
-function shadowFor(prop){
-  if (BOOLPROPS.includes(prop)) return bool(true);
-  if (NUMPROPS.includes(prop)) return num(prop === 'fontSize' ? 20 : 1);
+/* the starter value in a "set" block: what the property is set to right now, as in Thunkable */
+function shadowFor(prop, cur){
+  const has = cur !== undefined && cur !== null && cur !== '';
+  if (BOOLPROPS.includes(prop)) return bool(has ? (cur === true || cur === 'true') : true);
+  if (NUMPROPS.includes(prop)) return num(has && isFinite(Number(cur)) ? Number(cur) : (prop === 'fontSize' ? 20 : 1));
+  if (has && typeof cur === 'string' && cur.length <= 60 && !/^data:/i.test(cur)) return txt(cur);
   return txt(SAMPLE[prop] != null ? SAMPLE[prop] : '');
 }
 
@@ -32529,18 +32592,15 @@ function drawerFor(c){
   (meta.events || []).forEach(([ev, , args]) => {
     rows.push(`<block type="tk_ev_${c.type}_${ev}">${N}${outXml(args)}</block>`);
   });
-  (meta.blockProps || []).forEach(p => {
-    rows.push(`<block type="tk_set_${c.type}">${N}<field name="PROP">${p}</field><value name="VALUE">${shadowFor(p)}</value></block>`);
-  });
-  (meta.blockProps || []).forEach(p => {
-    rows.push(`<block type="tk_get_${c.type}">${N}<field name="PROP">${p}</field></block>`);
-  });
+  /* a call sits in the drawer as one line; it opens out — inputs, "with outputs",
+     "then do" — when it is dragged into the program */
   (meta.methods || []).forEach(m => {
-    const [name, , args, , outputs, outLabels] = m;
-    const vals = (args || []).map((a, i) => NO_SHADOW.includes(a) ? '' :
-      `<value name="A${i}">${(a === 'x' || a === 'y' || a === 'radius' || a === 'width' || a === 'height' || a === 'size' || a === 'latitude' || a === 'longitude' || a === 'zoom') ? num(a === 'radius' ? 20 : 50) : txt(a === 'colour' ? 'red' : '')}</value>`).join('');
-    const labels = (outputs || []).map(o => (outLabels && outLabels[o]) || o);
-    rows.push(`<block type="tk_m_${c.type}_${name}">${N}${vals}${outXml(labels)}</block>`);
+    rows.push(`<block type="tk_m_${c.type}_${m[0]}">${N}</block>`);
+  });
+  /* each property: its "set" block, then its value block */
+  (meta.blockProps || []).forEach(p => {
+    rows.push(`<block type="tk_set_${c.type}">${N}<field name="PROP">${p}</field><value name="VALUE">${shadowFor(p, c.props[p])}</value></block>`);
+    rows.push(`<block type="tk_get_${c.type}">${N}<field name="PROP">${p}</field></block>`);
   });
   if (c.type === 'screen') rows.push(`<block type="tk_navigate"><field name="SCREEN">${esc(c.name)}</field></block>`);
   if (!rows.length) return '';
@@ -32549,7 +32609,11 @@ function drawerFor(c){
 }
 
 function toolboxXml(){
-  const comps = TK.allComps().filter(c => !C[c.type].navigator);
+  /* Thunkable's order: the invisible components, then what is on the screen, then the screen itself */
+  const every = TK.allComps().filter(c => !C[c.type].navigator);
+  const comps = [...every.filter(c => C[c.type].invisible),
+                 ...every.filter(c => !C[c.type].invisible && c.type !== 'screen'),
+                 ...every.filter(c => c.type === 'screen')];
   const drawers = comps.map(drawerFor).join('');
   const hasDs = state.dataSources.length > 0;
   const anyType = (VISIBLE_TYPES()[0]) || 'button';
@@ -32625,7 +32689,7 @@ function toolboxXml(){
       <block type="tk_list_map"><value name="EXPR"><block type="math_arithmetic"><value name="A"><block type="tk_val"><field name="NAME">item</field></block></value><value name="B">${num(1)}</value></block></value></block>
       <block type="tk_val"><field name="NAME">item</field></block>
     </category>
-    <category name="Colour" colour="${COL.colour}">
+    <category name="Color" colour="${COL.colour}">
       <block type="tk_colour"></block>
       <block type="tk_colour_random"></block>
       <block type="tk_colour_rgb"><value name="R">${num(92)}</value><value name="G">${num(107)}</value><value name="B">${num(232)}</value></block>
@@ -32774,6 +32838,9 @@ function init(){
 
   useOfflineMedia(ws);
   TK.workspace = ws;
+  /* A block that is not inside a "when … do" (or another starting block) does
+     nothing. Thunkable greys those out; so do we — and they are left out of the program. */
+  ws.addChangeListener(Blockly.Events.disableOrphans);
   /* The open drawer is filled with its own colour, as in Thunkable. Its name is
      lettered white or dark, whichever can actually be read on that colour. */
   ws.addChangeListener(e => {
@@ -38767,7 +38834,8 @@ T.camera = {
   },
 };
 T.blank = { emoji:'📄', name:'Blank', tag:'Start', desc:'One empty screen', build(){
-  return { tree:[scr('Screen1', [])], files:[], dataSources:[], blocksXml:'<xml></xml>' };
+  /* a blank project starts exactly like "New project": a centred, unpadded screen */
+  return { tree:[scr('Screen1', [], Object.assign({ scrollable:false }, TK.PLACED.screen))], files:[], dataSources:[], blocksXml:'<xml></xml>' };
 } };
 
 T.quiz = {
